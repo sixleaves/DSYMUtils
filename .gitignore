@@ -1,3 +1,11 @@
+# MyDSYMUtil 
+config/
+dao/
+domain/
+service/Download*
+service/DSYMService*
+servlet/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
