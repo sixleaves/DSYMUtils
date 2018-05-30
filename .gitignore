@@ -2,8 +2,8 @@
 config/
 dao/
 domain/
-service/Download*
-service/DSYMService*
+DownloadDSYMService.py
+DSYMService.py
 servlet/
 
 # Byte-compiled / optimized / DLL files
