@@ -54,54 +54,68 @@ class CrashParseService:
         self.dsymFilename = FileUtils.getBasename(dsymPath)
         self.appFilename = self.dsymFilename.split(".").pop(0)
         self.dsymBinaryAbsolutePath = self.dsymPath + self.dsymBinaryRelativePath + "/" + self.appFilename
+        # print("dsymBinaryAbsolutePath:" + self.dsymBinaryAbsolutePath)
         # print("line" + str(sys._getframe().f_lineno) + ":"+ self.dsymBinaryAbsolutePath)
         self.cacheCrashFileBylines.clear()
 
         # 判断提供的是崩溃文件路径还是崩溃信息
         if crashFilePath != None and "" != crashFilePath:
             with open(crashFilePath, 'r') as f:
-                self.calcMemberParams(f)
+                self.calcMemberParams(f.readlines())
         else:
             self.calcMemberParams(crashStack)
 
     def calcMemberParams(self, f):
 
-        line, lineNum = self.readLine(f, index=0)
-        while line:
+        index = 0
+        line, lineNum,index = self.readLine(f, index=index)
+        crashThreadStartFlag =""
+        crashThreadEndFlag = "\n"
+        fileEndFlag = ""
+        while line != None:
+            try:
+                if line.find("Slide") != -1:
+                    self.slide = CrashParseService.str2num(line)  # 解析Slide值
+                if line.find("Incident Identifier") != -1:
+                    self.uuid = line.split(":")[1].strip()  # 解析获取app的uuid
+                if line.find(self.appFilename) != -1:
+                    try:
+                        self.loadAddress = int(line.split(" ").pop(0), 16)  # 获取loadAddress
+                        # print("line" + str(sys._getframe().f_lineno) + " loadAddress:"+str(self.loadAddress))
+                    except ValueError as e:
+                        self.loadAddress = 0XFF
+                if line.find("Last Exception Backtrace:") != -1:  # 记录lastExceptionBackTrace的起始和结束位置
+                    self.lastExpIndexObj.beginIndex = lineNum + 1
+                    self.lastExpIndexObj.endIndex = lineNum + 2
+                    # print(line)
+                if line.find("Triggered by Thread:") != -1:  # 解析引起崩溃的线程号
+                    self.threadNum = line.split(":").pop().strip()
+                if line.find("Thread {threadNum} Crashed:".format(threadNum=self.threadNum)) != -1:  # 记录崩溃线程号的其实位置和结束位置
+                    self.threadExpIndexObj.beginIndex = lineNum + 1
+                    while line != None or line != "":
+                        line, lineNum, index = self.readLine(f, index=index)
 
-            if line.find("Slide") != -1:
-                self.slide = CrashParseService.str2num(line)  # 解析Slide值
-            if line.find("Incident Identifier") != -1:
-                self.uuid = line.split(":")[1].strip()  # 解析获取app的uuid
-            if line.find(self.appFilename) != -1:
-                try:
-                    self.loadAddress = int(line.split(" ").pop(0), 16)  # 获取loadAddress
-                    # print("line" + str(sys._getframe().f_lineno) + " loadAddress:"+str(self.loadAddress))
-                except ValueError as e:
-                    self.loadAddress = 0XFF
-            if line.find("Last Exception Backtrace:") != -1:  # 记录lastExceptionBackTrace的起始和结束位置
-                self.lastExpIndexObj.beginIndex = lineNum + 1
-                self.lastExpIndexObj.endIndex = lineNum + 2
-                # print(line)
-            if line.find("Triggered by Thread:") != -1:  # 解析引起崩溃的线程号
-                self.threadNum = line.split(":").pop().strip()
-            if line.find("Thread {threadNum} Crashed:".format(threadNum=self.threadNum)) != -1:  # 记录崩溃线程号的其实位置和结束位置
-                self.threadExpIndexObj.beginIndex = lineNum + 1
-                while line:
-                    line, lineNum = self.readLine(f, index=lineNum)
-                    if len(line) == 1 and line.find("\n") != -1:
-                        self.threadExpIndexObj.endIndex = lineNum + 1
-                        break
+                        # 以这个来判断不太合适, 需要更改, 这些判断条件都要做成配置文件
+                        # 方便后续维护
 
-            line, lineNum = self.readLine(f, index=lineNum)
+                        if len(line) == 1 and line.find("\n") != -1:
+                            self.threadExpIndexObj.endIndex = lineNum + 1
+                            break
+
+                line, lineNum ,index= self.readLine(f, index=index)
+            except IndexError as e:
+                line = None
+
 
     def readLine(self, f, index = 0):
         if isinstance(f, list):
-            return f[index], index + 1
+            line = f[index]
+            self.cacheCrashFileBylines.append(line)
+            return line, index,index+1
         else:
             line = f.readline()
             self.cacheCrashFileBylines.append(line)
-            return line, len(self.cacheCrashFileBylines) -1
+            return line, len(self.cacheCrashFileBylines) -1, 0
 
 
     def parseLineWithDWAR(self, stackAddress):
@@ -157,6 +171,7 @@ class CrashParseService:
                 lineNum, component, stackAddress, loadAddress, plus, offset = line.split()
                 self.parseLineWithATOS(stackAddress, originLine=line, isOutputOriginLine= True, lineNum=lineNum)
             except ValueError as e:
+                # print(e)
                 pass
         print("====================ThreadException==================END===================ThreadException\n")
 
@@ -166,8 +181,9 @@ class CrashParseService:
             if line.find("Last Exception Backtrace:") != -1:
                 # print(line)
                 self.parseLastException()
-            if line.find("Thread 0 Crashed:") != -1:
+            if line.find("Thread {0} Crashed:".format(self.threadNum)) != -1:
                 self.parseThreadException()
+                break
 
 
     @staticmethod
