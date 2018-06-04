@@ -3,6 +3,7 @@ import re
 import os
 import subprocess
 
+from com.sweetcs.dsym.config import ParseRuleConfig
 from com.sweetcs.dsym.utils.FileUtils import FileUtils
 import sys
 
@@ -17,6 +18,8 @@ class CrashParseService:
 
 
     def __init__(self):
+
+        self.crashStartLineFlag, self.crashEndLineFlag,self.isThreadType = ParseRuleConfig.config()
 
         # 固定参数
         self.cpuType = "ARM64"
@@ -44,6 +47,9 @@ class CrashParseService:
 
         self.threadNum = "-1"
 
+
+
+
     # 初始化配置信息, 并提取崩溃文件对应的信息然后缓存
     def initConfig(self, dsymPath, crashFilePath, crashStack:list = None):
 
@@ -60,18 +66,16 @@ class CrashParseService:
 
         # 判断提供的是崩溃文件路径还是崩溃信息
         if crashFilePath != None and "" != crashFilePath:
-            with open(crashFilePath, 'r') as f:
+            with open(crashFilePath, 'r', encoding='utf-8') as f:
                 self.calcMemberParams(f.readlines())
         else:
             self.calcMemberParams(crashStack)
 
-    def calcMemberParams(self, f):
+    def calcMemberParams(self, lines):
 
         index = 0
-        line, lineNum,index = self.readLine(f, index=index)
-        crashThreadStartFlag =""
-        crashThreadEndFlag = "\n"
-        fileEndFlag = ""
+        line, lineNum,index = self.readLine(lines, index=index)
+
         while line != None:
             try:
                 if line.find("Slide") != -1:
@@ -90,19 +94,18 @@ class CrashParseService:
                     # print(line)
                 if line.find("Triggered by Thread:") != -1:  # 解析引起崩溃的线程号
                     self.threadNum = line.split(":").pop().strip()
-                if line.find("Thread {threadNum} Crashed:".format(threadNum=self.threadNum)) != -1:  # 记录崩溃线程号的其实位置和结束位置
+                if line.find(self.crashStartLineFlag.format(threadNum=self.threadNum)) != -1:  # 记录崩溃线程号的其实位置和结束位置
                     self.threadExpIndexObj.beginIndex = lineNum + 1
                     while line != None or line != "":
-                        line, lineNum, index = self.readLine(f, index=index)
+                        line, lineNum, index = self.readLine(lines, index=index)
 
                         # 以这个来判断不太合适, 需要更改, 这些判断条件都要做成配置文件
                         # 方便后续维护
-
-                        if len(line) == 1 and line.find("\n") != -1:
+                        if len(line) == len(self.crashEndLineFlag) and line.find(self.crashEndLineFlag) != -1:
                             self.threadExpIndexObj.endIndex = lineNum + 1
                             break
 
-                line, lineNum ,index= self.readLine(f, index=index)
+                line, lineNum ,index= self.readLine(lines, index=index)
             except IndexError as e:
                 line = None
 
@@ -156,6 +159,7 @@ class CrashParseService:
 
         # print("line" + str(sys._getframe().f_lineno) + " :"+ str(sys._getframe().f_code.co_name))
         print("====================LastException====================START=====================LastException\n")
+
         for line in self.cacheCrashFileBylines[self.lastExpIndexObj.beginIndex: self.lastExpIndexObj.endIndex]:
             lastExpStackAddrss = line.strip("() \n").split(" ")
             for stackAddress in lastExpStackAddrss:
@@ -243,7 +247,6 @@ if __name__ == "__main__":
     # crashParseService.parseLineWithDWAR(0x0000000102cdbc04)
     # crashParseService.parseLineWithDWAR(0x0000000102a30b34)
     # crashParseService.parseLineWithDWAR(0x00000001027d6264)
-
     # test_parse_lastExceptionBacktrace()
     test_parse_threadException()
 
