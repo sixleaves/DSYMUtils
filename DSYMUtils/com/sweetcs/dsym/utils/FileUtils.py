@@ -3,6 +3,9 @@ import os
 import shutil
 class FileUtils:
 
+    @staticmethod
+    def copy(srcPath, toPath):
+        pass
 
     # 获取文件名, 包含文件拓展名
     @staticmethod
