@@ -3,9 +3,16 @@ import os
 import shutil
 class FileUtils:
 
+
+    # 这个toPath必须是绝对路径
     @staticmethod
     def copy(srcPath, toPath):
-        pass
+
+        rootDir = FileUtils.getParentPath(toPath)
+        if os.path.exists(rootDir) == False:
+            os.mkdir(rootDir)
+        print("copy {0} to {1}".format(srcPath, toPath))
+        shutil.copy(srcPath, toPath)
 
     # 获取文件名, 包含文件拓展名
     @staticmethod

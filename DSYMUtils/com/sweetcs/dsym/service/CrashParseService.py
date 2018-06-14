@@ -4,14 +4,13 @@ import os
 import subprocess
 
 from com.sweetcs.dsym.config import ParseRuleConfig
+from com.sweetcs.dsym.domain.CrashStack import CrashStack
+from com.sweetcs.dsym.domain.IndexObject import IndexObject
 from com.sweetcs.dsym.utils.FileUtils import FileUtils
 import sys
 
 
-class IndexObject:
-    def __init__(self):
-        self.beginIndex = 0
-        self.endIndex = 0
+
 
 class CrashParseService:
 
@@ -47,7 +46,7 @@ class CrashParseService:
 
         self.threadNum = "-1"
 
-
+        self.crashStack = CrashStack()
 
 
     # 初始化配置信息, 并提取崩溃文件对应的信息然后缓存
@@ -69,9 +68,16 @@ class CrashParseService:
             with open(crashFilePath, 'r', encoding='utf-8') as f:
                 self.calcMemberParams(f.readlines())
         else:
-            self.calcMemberParams(crashStack)
+            self.calcMemberParams(crashStack, isOriginCrashLines=False)
 
-    def calcMemberParams(self, lines):
+    def calcMemberParams(self, lines:list, isOriginCrashLines=True):
+
+        # 如果不是原始崩溃文件, 而是处理后的崩溃行.那不用进行处理
+        if isOriginCrashLines == False:
+            self.threadExpIndexObj.beginIndex = 0
+            self.threadExpIndexObj.endIndex = len(lines)
+            self.cacheCrashFileBylines = lines
+            return
 
         index = 0
         line, lineNum,index = self.readLine(lines, index=index)
@@ -132,12 +138,16 @@ class CrashParseService:
         for r in result:
             print(str(r, encoding="utf-8"))
 
-    def parseLineWithATOS(self, stackAddress, originLine, isOutputOriginLine=False, lineNum=""):
+    def parseLineWithATOS(self, stackAddress, originLine, isOutputOriginLine=False, lineNum="", offset=0x00):
         if isinstance(stackAddress, str):
             stackAddress = int(stackAddress, 16)
+        if isinstance(offset, str):
+            offset = int(offset, 16)
             # print(stackAddress)
-        parseCMD = self.paresATOSCMDTempate.format(dsymPath=self.dsymBinaryAbsolutePath, loadAddress=str(hex(self.loadAddress)), stackAddress=str(hex(stackAddress)))
-        # print(parseCMD)
+        loadAddress = hex(int(stackAddress-offset))
+
+        parseCMD = self.paresATOSCMDTempate.format(dsymPath=self.dsymBinaryAbsolutePath, loadAddress=str(loadAddress), stackAddress=str(hex(stackAddress)))
+        print(parseCMD, "loadAddress:" , loadAddress)
         res = subprocess.Popen(parseCMD, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True)
         result = res.stdout.readlines()
         # print(result)
@@ -145,14 +155,18 @@ class CrashParseService:
             parseResultLine = str(r, encoding="utf-8").strip()
             # print(line)
             if parseResultLine.startswith("0x"):   # 如果该行只有数字, 说明解析不出来, 原样输出改行即可
-                if (False == isOutputOriginLine):
-                    print(str(hex(stackAddress)) + ": 系统组件")
+                if (False == isOutputOriginLine):  # 解析不出来, 控制是原样输出还是定制输出
+                    tempLine = str(hex(stackAddress)) + ": 系统组件"
+                    # print(tempLine)
+                    self.crashStack.append(tempLine, isBusinessCompoentLine= False)
                 else:
-                    print(originLine)
-            else:
-                print(lineNum, " ", parseResultLine + "\n")
+                    # print(originLine)
+                    self.crashStack.append(originLine, isBusinessCompoentLine= False)
+            else:                                  # 能够正常解析出来
+                tempLine = lineNum + " " +  parseResultLine + "\n"
+                # print(tempLine)
+                self.crashStack.append(tempLine, isBusinessCompoentLine= True)
                 # print(parseCMD)
-
 
     # 解析上一次崩溃堆栈
     def parseLastException(self):
@@ -173,7 +187,7 @@ class CrashParseService:
         for line in self.cacheCrashFileBylines[self.threadExpIndexObj.beginIndex: self.threadExpIndexObj.endIndex]:
             try:
                 lineNum, component, stackAddress, loadAddress, plus, offset = line.split()
-                self.parseLineWithATOS(stackAddress, originLine=line, isOutputOriginLine= True, lineNum=lineNum)
+                self.parseLineWithATOS(stackAddress, originLine=line, isOutputOriginLine= True, lineNum=lineNum,offset=offset)
             except ValueError as e:
                 # print(e)
                 pass
@@ -181,13 +195,19 @@ class CrashParseService:
 
 
     def parse(self):
-        for line in self.cacheCrashFileBylines:
-            if line.find("Last Exception Backtrace:") != -1:
-                # print(line)
-                self.parseLastException()
-            if line.find("Thread {0} Crashed:".format(self.threadNum)) != -1:
-                self.parseThreadException()
-                break
+        # 每次解析之前重置crashStack对象
+        self.crashStack.reset()
+        self.parseThreadException()
+        # for line in self.cacheCrashFileBylines:
+        #     if line.find("Last Exception Backtrace:") != -1:
+        #         # print(line)
+        #         self.parseLastException()
+        #     if line.find("Thread {0} Crashed:".format(self.threadNum)) != -1:
+        #         self.parseThreadException()
+        #         break
+
+        # ToDO 返回崩溃解析后的崩溃堆栈
+        return self.crashStack
 
 
     @staticmethod
