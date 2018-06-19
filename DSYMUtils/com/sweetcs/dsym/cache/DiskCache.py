@@ -1,7 +1,9 @@
 import psutil
 from collections import OrderedDict
-
 from com.sweetcs.dsym.utils.FileUtils import FileUtils
+import json
+import os
+from com.sweetcs.dsym.config import CacheConfig
 
 class DiskCache(OrderedDict):
     # 最大2W条缓存记录
@@ -9,6 +11,20 @@ class DiskCache(OrderedDict):
         self.capacity = capacity
         self.cache = OrderedDict()
 
+        # 初始化缓存文件
+        self.cacheFilePath= CacheConfig.config().get(CacheConfig.PATH)
+        self.cacheRootPath = FileUtils.getParentPath(self.cacheFilePath)
+        if os.path.exists(self.cacheFilePath) == False:
+            if os.path.exists(self.cacheRootPath) == False:
+                try:
+                    os.mkdir(self.cacheRootPath, mode=777)
+                except PermissionError as e:
+                    print("权限不够, 请手动创建缓存目录:{0}. 缓存配置文件在config包下的CacheConfig".format(self.cacheFilePath))
+                    exit(-1)
+            f = open(self.cacheFilePath, mode="w+")
+            f.close()
+        else:
+            self.syncFromDisk()
 
     def get(self, key):
         if self.cache.__contains__(key):
@@ -30,20 +46,43 @@ class DiskCache(OrderedDict):
                 url = item[0],path = item[1]
                 FileUtils.deleteFile(path)
 
+            if self.cache.__contains__(key):
+                pass
+            else:
+                if len(self.cache) == self.capacity:
+                    self.cache.popitem(last=False)
+                    self.cache[key] = os.path.abspath(value)
+                else:
+                    self.cache[key] = os.path.abspath(value)
         except KeyError as e:
             pass
         finally:
-            print("delete " + str(item))
+            self.syncToDisk()
 
-        if self.cache.__contains__(key):
-            value = self.cache.pop(key)
-            self.cache[key] = value
-        else:
-            if len(self.cache) == self.capacity:
-                self.cache.popitem(last=False)
-                self.cache[key] = value
+    # 将缓存信息同步到磁盘
+    def syncToDisk(self):
+        try:
+            jsObj = json.dumps(self.cache)
+            fileObject = open(self.cacheFilePath, 'w')
+            fileObject.write(jsObj)
+        finally:
+            fileObject.close()
+
+    # 将缓存信息同步到磁盘
+    def syncFromDisk(self):
+        try:
+            fileObject = open(self.cacheFilePath, 'r')
+            r = fileObject.readlines()
+            if len(r) == 0:
+                pass
             else:
-                self.cache[key] = value
+                tempDict = json.loads(r[0])
+                self.cache = OrderedDict(tempDict)
+
+            print(r, type(r))
+        finally:
+            fileObject.close()
+
 
     def has_key(self, key):
         return self.cache.__contains__(key)
@@ -56,7 +95,7 @@ class DiskCache(OrderedDict):
 
     # threshold 设置硬盘剩余空间的比例
     @classmethod
-    def isDiskFull(cls, path='/', threshold=50):
+    def isDiskFull(cls, path='/', threshold=25):
         remain = cls.remainDisk(path)
         if remain < threshold:
             return True
@@ -64,23 +103,16 @@ class DiskCache(OrderedDict):
 
 if __name__ == '__main__':
     c = DiskCache()
-    for i in range(5, 10):
-        c.set(i, 10 * i)
 
-    print(c.cache, c.cache.keys())
 
-    c.get(5)
-    c.get(7)
+    # 'http://debug.s3.nds.sdp/release_app_fac_dysm/common-control-demo1499741291523_1525328997987-dSYM.zipdsym'
+    # './15290540898014dsym'
+    c.set("http://debug.s3.nds.sdp/release_app_fac_dysm/common-control-demo1499741291523_1525328997987-dSYM.zipdsym", "./15290540898014dsym")
+    c.set("http://debug.s3.nds.sdp/release_app_fac_dysm/common-control-demo1499741291523_1525328997987-dSYM.zipdsym1", "./15290540898014dsym")
+    c.set("http://debug.s3.nds.sdp/release_app_fac_dysm/common-control-demo1499741291523_1525328997987-dSYM.zipdsym2", "./15290540898014dsym")
+    c.set("http://debug.s3.nds.sdp/release_app_fac_dysm/common-control-demo1499741291523_1525328997987-dSYM.zipdsym3", "./15290540898014dsym")
+    c.set("http://debug.s3.nds.sdp/release_app_fac_dysm/common-control-demo1499741291523_1525328997987-dSYM.zipdsym4", "./15290540898014dsym")
+    c.set("http://debug.s3.nds.sdp/release_app_fac_dysm/common-control-demo1499741291523_1525328997987-dSYM.zipdsym5", "./15290540898014dsym")
+    print(c.has_key("http://debug.s3.nds.sdp/release_app_fac_dysm/common-control-demo1499741291523_1525328997987-dSYM.zipdsym"))
+    print(c.get("http://debug.s3.nds.sdp/release_app_fac_dysm/common-control-demo1499741291523_1525328997987-dSYM.zipdsym"))
 
-    print(c.cache, c.cache.keys())
-
-    c.set(10, 100)
-
-    # item = c.cache.popitem(last=False)
-    # print(item[0], item[1])
-    # print(c.cache, c.cache.keys())
-    #
-    # c.set(9, 44)
-    # print(c.cache, c.cache.keys())
-    # remain = DiskCache.remainDisk()
-    # print(DiskCache.isDiskFull())

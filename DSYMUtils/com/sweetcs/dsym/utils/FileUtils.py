@@ -22,7 +22,7 @@ class FileUtils:
     # 获取filePath的上级路径
     @staticmethod
     def getParentPath(filePath:str):
-        end = filePath.strip("/").rindex("/")
+        end = filePath.rstrip("/").rindex("/")
         return filePath[:end]
 
     # 获取文件名, 不包含文件拓展名
@@ -35,7 +35,7 @@ class FileUtils:
     # 从dir目录中获取包含extension后缀的文件的绝对路径
     @staticmethod
     def getAbsolutelyPathFromDirWithExtension(dirPath:str, extension:str, isGetFirstOnly = False):
-        dirPath = dirPath.strip("/")
+        dirPath = dirPath.rstrip("/")
         filenames=os.listdir(dirPath)
         filePaths = []
         for filename in filenames:

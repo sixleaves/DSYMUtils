@@ -1,19 +1,16 @@
 
 import re
-import os
 import subprocess
 
 from com.sweetcs.dsym.config import ParseRuleConfig
 from com.sweetcs.dsym.domain.CrashStack import CrashStack
 from com.sweetcs.dsym.domain.IndexObject import IndexObject
 from com.sweetcs.dsym.utils.FileUtils import FileUtils
-import sys
 
 
 
 
 class CrashParseService:
-
 
 
     def __init__(self):
@@ -142,19 +139,20 @@ class CrashParseService:
         if isinstance(stackAddress, str):
             stackAddress = int(stackAddress, 16)
         if isinstance(offset, str):
-            offset = int(offset, 16)
+            offset = int(offset, 10)
             # print(stackAddress)
         loadAddress = hex(int(stackAddress-offset))
 
         parseCMD = self.paresATOSCMDTempate.format(dsymPath=self.dsymBinaryAbsolutePath, loadAddress=str(loadAddress), stackAddress=str(hex(stackAddress)))
-        print(parseCMD, "loadAddress:" , loadAddress)
+        # print(parseCMD, "loadAddress:" , loadAddress)
         res = subprocess.Popen(parseCMD, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True)
         result = res.stdout.readlines()
         # print(result)
         for r in result:
             parseResultLine = str(r, encoding="utf-8").strip()
             # print(line)
-            if parseResultLine.startswith("0x"):   # 如果该行只有数字, 说明解析不出来, 原样输出改行即可
+            if parseResultLine.startswith("0x"):   # 如果该行只有数字, 说
+                # 明解析不出来, 原样输出改行即可
                 if (False == isOutputOriginLine):  # 解析不出来, 控制是原样输出还是定制输出
                     tempLine = str(hex(stackAddress)) + ": 系统组件"
                     # print(tempLine)
@@ -172,26 +170,26 @@ class CrashParseService:
     def parseLastException(self):
 
         # print("line" + str(sys._getframe().f_lineno) + " :"+ str(sys._getframe().f_code.co_name))
-        print("====================LastException====================START=====================LastException\n")
+        # print("====================LastException====================START=====================LastException\n")
 
         for line in self.cacheCrashFileBylines[self.lastExpIndexObj.beginIndex: self.lastExpIndexObj.endIndex]:
             lastExpStackAddrss = line.strip("() \n").split(" ")
             for stackAddress in lastExpStackAddrss:
                 self.parseLineWithATOS(stackAddress, originLine=line)
-        print("====================LastException====================END=====================LastException\n")
+        # print("====================LastException====================END=====================LastException\n")
 
     # 解析线程崩溃堆栈
     def parseThreadException(self):
         # print("line" + str(sys._getframe().f_lineno) + " :"+ str(sys._getframe().f_code.co_name))
-        print("====================ThreadException==================START===================ThreadException\n")
+        # print("====================ThreadException==================START===================ThreadException\n")
         for line in self.cacheCrashFileBylines[self.threadExpIndexObj.beginIndex: self.threadExpIndexObj.endIndex]:
             try:
-                lineNum, component, stackAddress, loadAddress, plus, offset = line.split()
+                lineNum, stackAddress, offset = CrashParseService.getStackAddressAndOffset(line)
                 self.parseLineWithATOS(stackAddress, originLine=line, isOutputOriginLine= True, lineNum=lineNum,offset=offset)
             except ValueError as e:
                 # print(e)
                 pass
-        print("====================ThreadException==================END===================ThreadException\n")
+        # print("====================ThreadException==================END===================ThreadException\n")
 
 
     def parse(self):
@@ -206,7 +204,7 @@ class CrashParseService:
         #         self.parseThreadException()
         #         break
 
-        # ToDO 返回崩溃解析后的崩溃堆栈
+        # 返回崩溃解析后的崩溃堆栈
         return self.crashStack
 
 
@@ -215,6 +213,14 @@ class CrashParseService:
         num = int("".join(list(filter(str.isdigit, lineStr))))
         return int(num)
 
+    @staticmethod
+    def getStackAddressAndOffset(line:str):
+        try:
+            p = re.compile(r"(\d+)\s+\S+\s*\w*(0x[a-f0-9]+)\s+.+\s+\+\s+(\d+)")
+            match = p.match(line)
+            return match.group(1),match.group(2),match.group(3)
+        except Exception as e:
+            print(e)
 
 
 
@@ -268,7 +274,10 @@ if __name__ == "__main__":
     # crashParseService.parseLineWithDWAR(0x0000000102a30b34)
     # crashParseService.parseLineWithDWAR(0x00000001027d6264)
     # test_parse_lastExceptionBacktrace()
-    test_parse_threadException()
+    # test_parse_threadException()
+    print(CrashParseService.getStackAddressAndOffset("0   libsystem_kernel.dylib          0x00000001837992ec AAAAAAAAAAA + 140012"))
+    print(CrashParseService.getStackAddressAndOffset("3   ...n-control-demo1499741291523\\\t0x0000000102cdbc04 AAAAAAAAAAA + 5291012"))
+
 
 
 

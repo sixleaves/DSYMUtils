@@ -1,6 +1,5 @@
 from com.sweetcs.dsym.config import RequestURIConfig, Constant
 from com.sweetcs.dsym.utils.RequestUtils import RequestUtils
-from com.sweetcs.dsym.utils.StringUtils import StringUtils
 
 
 class PageObject:
