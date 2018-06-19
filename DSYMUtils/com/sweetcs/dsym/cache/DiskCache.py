@@ -4,8 +4,22 @@ from com.sweetcs.dsym.utils.FileUtils import FileUtils
 import json
 import os
 from com.sweetcs.dsym.config import CacheConfig
+import threading
+
+_set_lock = threading.Lock()
+_io_lock = threading.Lock()
 
 class DiskCache(OrderedDict):
+
+    _instance_lock = threading.Lock()
+
+    def __new__(cls, *args, **kwargs):
+        if not hasattr(cls, '_instance'):
+            with cls._instance_lock:
+                if not hasattr(cls, '_instance'):
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+
     # 最大2W条缓存记录
     def __init__(self, capacity=20000):
         self.capacity = capacity
@@ -37,6 +51,9 @@ class DiskCache(OrderedDict):
 
     def set(self, key, value):
 
+        global _set_lock
+        _set_lock.acquire()
+
         item="Nothing"
         try:
             while(True):
@@ -57,19 +74,25 @@ class DiskCache(OrderedDict):
         except KeyError as e:
             pass
         finally:
+            _set_lock.release()
             self.syncToDisk()
 
     # 将缓存信息同步到磁盘
     def syncToDisk(self):
+        global _io_lock
+        _io_lock.acquire()
         try:
             jsObj = json.dumps(self.cache)
             fileObject = open(self.cacheFilePath, 'w')
             fileObject.write(jsObj)
         finally:
             fileObject.close()
+            _io_lock.release()
 
     # 将缓存信息同步到磁盘
     def syncFromDisk(self):
+        global _io_lock
+        _io_lock.acquire()
         try:
             fileObject = open(self.cacheFilePath, 'r')
             r = fileObject.readlines()
@@ -79,9 +102,10 @@ class DiskCache(OrderedDict):
                 tempDict = json.loads(r[0])
                 self.cache = OrderedDict(tempDict)
 
-            print(r, type(r))
+            # print(r, type(r))
         finally:
             fileObject.close()
+            _io_lock.release()
 
 
     def has_key(self, key):
@@ -103,7 +127,8 @@ class DiskCache(OrderedDict):
 
 if __name__ == '__main__':
     c = DiskCache()
-
+    c2 = DiskCache()
+    print(id(c), id(c2))
 
     # 'http://debug.s3.nds.sdp/release_app_fac_dysm/common-control-demo1499741291523_1525328997987-dSYM.zipdsym'
     # './15290540898014dsym'
